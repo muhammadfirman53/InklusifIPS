@@ -1,0 +1,8 @@
+{
+  "name": "LMS Inklusif IPS SMA - Belajar Fleksibel Berbasis UDL",
+  "description": "Prototipe LMS Inklusif Berbasis UDL untuk Pembelajaran Sosiologi/IPS SMA dengan dukungan Online & Offline, ramah smartphone, dan multi-representasi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
