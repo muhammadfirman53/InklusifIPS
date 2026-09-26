@@ -9,6 +9,7 @@ import { ActivitiesScreen } from './components/screens/ActivitiesScreen';
 import { DiscussionScreen } from './components/screens/DiscussionScreen';
 import { AssessmentScreen } from './components/screens/AssessmentScreen';
 import { ProfileScreen } from './components/screens/ProfileScreen';
+import { LoginScreen } from './components/auth/LoginScreen';
 
 import { PathwayModal } from './components/modals/PathwayModal';
 import { OfflineDownloadModal } from './components/modals/OfflineDownloadModal';
@@ -20,21 +21,65 @@ import { StudentManagementModal } from './components/modals/StudentManagementMod
 import { ShareRoleLinksModal } from './components/modals/ShareRoleLinksModal';
 import { ResetConfirmationModal } from './components/modals/ResetConfirmationModal';
 
-import { LearningPathway, AccessibilitySettings, SubmissionRecord, UserRole, MaterialItem, StudentProfile, ActivityItem } from './types/learning';
-import { INITIAL_SUBMISSIONS, MATERIALS_DATA, INITIAL_STUDENTS, ACTIVITIES_DATA } from './data/curriculumData';
+import {
+  LearningPathway,
+  AccessibilitySettings,
+  SubmissionRecord,
+  UserRole,
+  MaterialItem,
+  StudentProfile,
+  ActivityItem,
+  UserSession,
+} from './types/learning';
+
+import {
+  loadStoredSubmissions,
+  saveStoredSubmissions,
+  loadStoredMaterials,
+  saveStoredMaterials,
+  loadStoredStudents,
+  saveStoredStudents,
+  loadStoredActivities,
+  saveStoredActivities,
+  loadStoredAuth,
+  saveStoredAuth,
+  subscribeToSync,
+} from './utils/storageSync';
+
 import { speakText, stopSpeech } from './utils/speech';
-import { Smartphone, Monitor, WifiOff, FileText, Sparkles, RefreshCw, CheckCircle2, RotateCcw } from 'lucide-react';
+import {
+  Smartphone,
+  Monitor,
+  WifiOff,
+  FileText,
+  Sparkles,
+  RefreshCw,
+  CheckCircle2,
+  RotateCcw,
+  BellRing
+} from 'lucide-react';
 
 export default function App() {
+  // Authentication & Session
+  const [currentUserSession, setCurrentUserSession] = useState<UserSession | null>(() => loadStoredAuth());
   const [currentTab, setCurrentTab] = useState<NavigationTab>('beranda');
-  const [userRole, setUserRole] = useState<UserRole>('siswa');
-  const [pathway, setPathway] = useState<LearningPathway>('online');
+
+  // Shared synchronized states
+  const [submissions, setSubmissions] = useState<SubmissionRecord[]>(() => loadStoredSubmissions());
+  const [materials, setMaterials] = useState<MaterialItem[]>(() => loadStoredMaterials());
+  const [students, setStudents] = useState<StudentProfile[]>(() => loadStoredStudents());
+  const [activities, setActivities] = useState<ActivityItem[]>(() => loadStoredActivities());
+
+  // Active student & role derived from session
+  const userRole: UserRole = currentUserSession?.role || 'siswa';
+  const currentStudentName = currentUserSession?.name || (students[0]?.name ?? 'Dita Anggraini');
+  const [pathway, setPathway] = useState<LearningPathway>(
+    () => currentUserSession?.preferredPathway || 'online'
+  );
+
   const [isOfflineSimulated, setIsOfflineSimulated] = useState<boolean>(false);
   const [isMockupView, setIsMockupView] = useState<boolean>(false);
-  const [materials, setMaterials] = useState<MaterialItem[]>(MATERIALS_DATA);
-  const [students, setStudents] = useState<StudentProfile[]>(INITIAL_STUDENTS);
-  const [activities, setActivities] = useState<ActivityItem[]>(ACTIVITIES_DATA);
-  const [activeStudentId, setActiveStudentId] = useState<string>(INITIAL_STUDENTS[0].id);
+  const [activeStudentId, setActiveStudentId] = useState<string>(() => students[0]?.id || 'std-1');
 
   const [accessibility, setAccessibility] = useState<AccessibilitySettings>({
     fontSize: 'normal',
@@ -45,7 +90,6 @@ export default function App() {
   });
 
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
-  const [submissions, setSubmissions] = useState<SubmissionRecord[]>(INITIAL_SUBMISSIONS);
   const [downloadedMaterialIds, setDownloadedMaterialIds] = useState<string[]>([
     'mat-modul',
     'mat-infografis',
@@ -61,51 +105,112 @@ export default function App() {
   const [showStudentManagementModal, setShowStudentManagementModal] = useState<boolean>(false);
   const [showShareLinksModal, setShowShareLinksModal] = useState<boolean>(false);
   const [showResetModal, setShowResetModal] = useState<boolean>(false);
-  const [resetToastMessage, setResetToastMessage] = useState<string | null>(null);
 
-  // Sync role with URL search params on mount: ?role=guru or ?role=siswa
-  useEffect(() => {
+  // Live Toast Notifications
+  const [resetToastMessage, setResetToastMessage] = useState<string | null>(null);
+  const [liveTeacherToast, setLiveTeacherToast] = useState<string | null>(null);
+
+  // Read URL params: e.g. ?role=guru or ?role=siswa
+  const [urlRoleParam, setUrlRoleParam] = useState<UserRole | undefined>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const roleParam = params.get('role');
-      if (roleParam === 'guru' || roleParam === 'siswa') {
-        setUserRole(roleParam);
-      }
-    } catch (err) {
-      // ignore in environments without window.location
+      const r = params.get('role');
+      if (r === 'guru' || r === 'siswa') return r as UserRole;
+    } catch (e) {
+      // ignore
     }
-  }, []);
+    return undefined;
+  });
 
-  const handleSetRole = (role: UserRole) => {
-    setUserRole(role);
+  // Cross-Tab Real-time Synchronisation (BroadcastChannel)
+  useEffect(() => {
+    const unsubscribe = subscribeToSync((msg) => {
+      if (msg.type === 'SUBMISSIONS_UPDATED') {
+        setSubmissions(msg.data);
+      } else if (msg.type === 'MATERIALS_UPDATED') {
+        setMaterials(msg.data);
+      } else if (msg.type === 'STUDENTS_UPDATED') {
+        setStudents(msg.data);
+      } else if (msg.type === 'ACTIVITIES_UPDATED') {
+        setActivities(msg.data);
+      } else if (msg.type === 'STUDENT_SUBMITTED') {
+        if (currentUserSession?.role === 'guru') {
+          setLiveTeacherToast(
+            `📢 Tugas Baru Masuk: "${msg.title}" oleh ${msg.studentName}! Siap dikoreksi di LMS Guru.`
+          );
+          setTimeout(() => setLiveTeacherToast(null), 6000);
+        }
+      }
+    });
+    return unsubscribe;
+  }, [currentUserSession?.role]);
+
+  // Handle Login
+  const handleLoginSuccess = (session: UserSession) => {
+    setCurrentUserSession(session);
+    saveStoredAuth(session);
+    if (session.role === 'siswa' && session.preferredPathway) {
+      setPathway(session.preferredPathway);
+    }
     try {
       const url = new URL(window.location.href);
-      url.searchParams.set('role', role);
+      url.searchParams.set('role', session.role);
       window.history.replaceState({}, '', url.toString());
-    } catch (err) {
+    } catch (e) {
       // ignore
     }
   };
 
-  const handleToggleRole = () => {
-    handleSetRole(userRole === 'siswa' ? 'guru' : 'siswa');
+  // Handle Logout
+  const handleLogout = () => {
+    setCurrentUserSession(null);
+    saveStoredAuth(null);
+    stopSpeech();
+    setIsSpeaking(false);
+  };
+
+  // Switch role exclusively for Teacher Simulation (never accessible to student)
+  const handleTeacherSimulateStudent = () => {
+    if (userRole === 'guru') {
+      const simulatedSession: UserSession = {
+        role: 'siswa',
+        name: students[0]?.name || 'Dita Anggraini',
+        nisn: students[0]?.nisn || '0081234561',
+        classroom: 'XI-IPS 1 (Mode Simulasi Guru)',
+        preferredPathway: 'online',
+      };
+      setCurrentUserSession(simulatedSession);
+      saveStoredAuth(simulatedSession);
+    }
   };
 
   // Reset Student Submissions & Completed Work
   const handleResetAllStudentWork = (mode: 'clear_all' | 'restore_defaults') => {
     if (mode === 'clear_all') {
       setSubmissions([]);
-      setActivities((prev) => prev.map((act) => ({ ...act, completed: false })));
-      setStudents((prev) =>
-        prev.map((std) => ({ ...std, completedActivities: 0, totalSubmissions: 0 }))
-      );
+      saveStoredSubmissions([]);
+
+      const resetActs = activities.map((act) => ({ ...act, completed: false }));
+      setActivities(resetActs);
+      saveStoredActivities(resetActs);
+
+      const resetStds = students.map((std) => ({ ...std, completedActivities: 0, totalSubmissions: 0 }));
+      setStudents(resetStds);
+      saveStoredStudents(resetStds);
+
       setResetToastMessage(
         'Semua kiriman tugas, aktivitas kuis, dan jawaban siswa berhasil direset ke 0! Siswa dapat mengulang dari awal.'
       );
     } else {
-      setSubmissions(INITIAL_SUBMISSIONS);
-      setActivities(ACTIVITIES_DATA);
-      setStudents(INITIAL_STUDENTS);
+      setSubmissions(loadStoredSubmissions());
+      saveStoredSubmissions(loadStoredSubmissions());
+
+      setActivities(loadStoredActivities());
+      saveStoredActivities(loadStoredActivities());
+
+      setStudents(loadStoredStudents());
+      saveStoredStudents(loadStoredStudents());
+
       setResetToastMessage(
         'Data pembelajaran siswa berhasil dikembalikan ke contoh bawaan awal.'
       );
@@ -115,17 +220,33 @@ export default function App() {
 
   // Student management actions
   const handleAddStudent = (newStudent: StudentProfile) => {
-    setStudents([newStudent, ...students]);
+    const updated = [newStudent, ...students];
+    setStudents(updated);
+    saveStoredStudents(updated);
   };
 
   const handleDeleteStudent = (studentId: string) => {
-    setStudents(students.filter((s) => s.id !== studentId));
+    const updated = students.filter((s) => s.id !== studentId);
+    setStudents(updated);
+    saveStoredStudents(updated);
   };
 
   const handleSelectActiveStudent = (student: StudentProfile) => {
     setActiveStudentId(student.id);
     setPathway(student.preferredPathway);
-    handleSetRole('siswa');
+    if (currentUserSession?.role === 'guru') {
+      // Teacher choosing to inspect as this student
+      const simulatedSession: UserSession = {
+        role: 'siswa',
+        name: student.name,
+        nisn: student.nisn,
+        classroom: student.classroom,
+        studentId: student.id,
+        preferredPathway: student.preferredPathway,
+      };
+      setCurrentUserSession(simulatedSession);
+      saveStoredAuth(simulatedSession);
+    }
   };
 
   // Unread notifications count
@@ -149,9 +270,27 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Add new submission
+  // Add new submission by student (instantly connects to teacher LMS!)
   const handleSubmitTask = (newSubmission: SubmissionRecord) => {
-    setSubmissions([newSubmission, ...submissions]);
+    const updated = [newSubmission, ...submissions];
+    setSubmissions(updated);
+    saveStoredSubmissions(updated, newSubmission.studentName, newSubmission.title);
+
+    // Update student's total submissions count
+    setStudents((prev) =>
+      prev.map((std) =>
+        std.name.toLowerCase() === newSubmission.studentName.toLowerCase()
+          ? { ...std, totalSubmissions: std.totalSubmissions + 1 }
+          : std
+      )
+    );
+  };
+
+  // Teacher updates/grades submission
+  const handleUpdateSubmission = (updatedSub: SubmissionRecord) => {
+    const updatedList = submissions.map((s) => (s.id === updatedSub.id ? updatedSub : s));
+    setSubmissions(updatedList);
+    saveStoredSubmissions(updatedList);
   };
 
   const handleDownloadedAll = () => {
@@ -177,13 +316,26 @@ export default function App() {
     }
   };
 
-  // Handle add material from teacher
+  // Handle add material from teacher (saves to storage & syncs to students)
   const handleAddMaterial = (newMat: MaterialItem) => {
-    setMaterials([newMat, ...materials]);
+    const updated = [newMat, ...materials];
+    setMaterials(updated);
+    saveStoredMaterials(updated);
     if (newMat.downloaded) {
       setDownloadedMaterialIds((prev) => [...prev, newMat.id]);
     }
   };
+
+  // IF NOT LOGGED IN: Render LoginScreen
+  if (!currentUserSession) {
+    return (
+      <LoginScreen
+        initialRole={urlRoleParam || 'siswa'}
+        students={students}
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
 
   // Render current screen
   const renderScreen = () => {
@@ -192,6 +344,7 @@ export default function App() {
         return (
           <HomeScreen
             userRole={userRole}
+            currentStudentName={currentStudentName}
             pathway={pathway}
             isOfflineSimulated={isOfflineSimulated}
             studentCount={students.length}
@@ -240,7 +393,10 @@ export default function App() {
         return (
           <ActivitiesScreen
             activities={activities}
-            onUpdateActivities={setActivities}
+            onUpdateActivities={(newActs) => {
+              setActivities(newActs);
+              saveStoredActivities(newActs);
+            }}
             onSpeak={handleSpeak}
           />
         );
@@ -255,26 +411,27 @@ export default function App() {
         return (
           <AssessmentScreen
             userRole={userRole}
+            currentStudentName={currentStudentName}
             isOfflineSimulated={isOfflineSimulated}
             onSpeak={handleSpeak}
             submissions={submissions}
             onSubmitTask={handleSubmitTask}
             onOpenStudentManagement={() => setShowStudentManagementModal(true)}
             onOpenResetModal={() => setShowResetModal(true)}
-            onUpdateSubmission={(updated) =>
-              setSubmissions((prev) =>
-                prev.map((s) => (s.id === updated.id ? updated : s))
-              )
-            }
+            onUpdateSubmission={handleUpdateSubmission}
           />
         );
       case 'profil':
         return (
           <ProfileScreen
             userRole={userRole}
+            activeUserName={currentUserSession?.name}
+            activeNisn={currentUserSession?.nisn}
+            activeClassroom={currentUserSession?.classroom}
             accessibility={accessibility}
             onUpdateAccessibility={setAccessibility}
-            onToggleRole={handleToggleRole}
+            onLogout={handleLogout}
+            onToggleRole={userRole === 'guru' ? handleTeacherSimulateStudent : undefined}
             onOpenTeacherUpload={() => setShowTeacherUploadModal(true)}
             onOpenStudentManagement={() => setShowStudentManagementModal(true)}
             onOpenShareLinks={() => setShowShareLinksModal(true)}
@@ -302,6 +459,25 @@ export default function App() {
         </div>
       )}
 
+      {/* Live Teacher Notification when student submits */}
+      {liveTeacherToast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-slate-900 border-2 border-emerald-400 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 max-w-md w-11/12 animate-fadeIn">
+          <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center shrink-0">
+            <BellRing className="w-4 h-4 text-white animate-spin" />
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-emerald-300">Pemberitahuan Real-Time LMS</p>
+            <p className="text-[11px] text-slate-200">{liveTeacherToast}</p>
+          </div>
+          <button
+            onClick={() => setLiveTeacherToast(null)}
+            className="text-slate-400 hover:text-white text-xs px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <Header
         currentTab={currentTab}
@@ -311,7 +487,9 @@ export default function App() {
         isMockupView={isMockupView}
         unreadNotificationsCount={unreadNotifications}
         isSpeaking={isSpeaking}
-        onToggleRole={handleToggleRole}
+        activeUserName={currentUserSession?.name}
+        onLogout={handleLogout}
+        onToggleRole={userRole === 'guru' ? handleTeacherSimulateStudent : undefined}
         onOpenTeacherUpload={() => setShowTeacherUploadModal(true)}
         onOpenShareLinks={() => setShowShareLinksModal(true)}
         onOpenStudentManagement={() => setShowStudentManagementModal(true)}
@@ -319,72 +497,31 @@ export default function App() {
         onToggleOfflineSim={() => setIsOfflineSimulated(!isOfflineSimulated)}
         onToggleMockupView={() => setIsMockupView(!isMockupView)}
         onOpenPathwayModal={() => setShowPathwayModal(true)}
-        onOpenNotifications={() => {
-          setShowNotificationsModal(true);
-          setUnreadNotifications(0);
-        }}
+        onOpenNotifications={() => setShowNotificationsModal(true)}
         onOpenBlueprint={() => setShowProjectBlueprintModal(true)}
         onStopSpeaking={handleStopSpeaking}
       />
 
-      {/* Main View Area */}
-      {isMockupView ? (
-        /* Smartphone Mockup Container (replicating the uploaded ChatGPT mockup phone frame) */
-        <div className="py-6 px-3 flex flex-col items-center justify-center min-h-[calc(100vh-60px)] bg-slate-900/90 backdrop-blur-md">
-          <div className="mb-3 text-center text-white">
-            <span className="text-xs font-semibold px-3 py-1 bg-emerald-600/80 rounded-full inline-flex items-center gap-1.5 shadow-sm">
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Mode Tampilan Smartphone Mockup (V1)</span>
-            </span>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Simulasi interaktif tampilan HP siswa di wilayah pedesaan
-            </p>
-          </div>
+      {/* Main Content Area */}
+      <main className="p-3 sm:p-5 max-w-4xl mx-auto">
+        {renderScreen()}
+      </main>
 
-          {/* Smartphone Frame Outer Bezel */}
-          <div className="relative w-full max-w-[400px] h-[780px] bg-black rounded-[48px] p-3.5 shadow-2xl border-4 border-slate-700 ring-8 ring-slate-800/50 flex flex-col overflow-hidden">
-            {/* Speaker / Dynamic Island Top Notch */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 w-28 h-5 bg-black rounded-full z-50 flex items-center justify-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-slate-800"></div>
-              <div className="w-10 h-1.5 rounded-full bg-slate-900"></div>
-            </div>
+      {/* Bottom Navigation */}
+      <BottomNav
+        activeTab={currentTab}
+        onSelectTab={handleSelectTab}
+        completedActivitiesCount={activities.filter((a) => a.completed).length}
+      />
 
-            {/* Mobile Screen Inside Frame */}
-            <div className="w-full h-full bg-slate-100 rounded-[36px] overflow-y-auto overflow-x-hidden relative flex flex-col pt-7 pb-16 no-scrollbar">
-              <main className="flex-1 px-3 pt-2">
-                {renderScreen()}
-              </main>
-
-              {/* Bottom Nav inside Phone Frame */}
-              <div className="absolute bottom-0 left-0 right-0 z-40">
-                <BottomNav
-                  activeTab={currentTab}
-                  onSelectTab={handleSelectTab}
-                  completedActivitiesCount={1}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* Full-Width / Responsive Tablet & Mobile Container */
-        <div className="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
-          <main>{renderScreen()}</main>
-
-          {/* Fixed Bottom Navigation */}
-          <BottomNav
-            activeTab={currentTab}
-            onSelectTab={handleSelectTab}
-            completedActivitiesCount={1}
-          />
-        </div>
-      )}
-
-      {/* Modals & Dialogs */}
+      {/* Modals & Drawers */}
       {showPathwayModal && (
         <PathwayModal
           currentPathway={pathway}
-          onSelectPathway={(newPathway) => setPathway(newPathway)}
+          onSelectPathway={(p) => {
+            setPathway(p);
+            setShowPathwayModal(false);
+          }}
           onClose={() => setShowPathwayModal(false)}
         />
       )}
@@ -398,9 +535,15 @@ export default function App() {
 
       {showNotificationsModal && (
         <NotificationsDrawer
-          onClose={() => setShowNotificationsModal(false)}
+          onClose={() => {
+            setShowNotificationsModal(false);
+            setUnreadNotifications(0);
+          }}
           onNavigate={handleSelectTab}
-          onOpenReflection={() => setShowReflectionModal(true)}
+          onOpenReflection={() => {
+            setShowNotificationsModal(false);
+            setShowReflectionModal(true);
+          }}
         />
       )}
 
@@ -409,9 +552,7 @@ export default function App() {
       )}
 
       {showProjectBlueprintModal && (
-        <ProjectBlueprintModal
-          onClose={() => setShowProjectBlueprintModal(false)}
-        />
+        <ProjectBlueprintModal onClose={() => setShowProjectBlueprintModal(false)} />
       )}
 
       {showTeacherUploadModal && (
@@ -435,7 +576,11 @@ export default function App() {
       {showShareLinksModal && (
         <ShareRoleLinksModal
           currentRole={userRole}
-          onSelectRole={handleSetRole}
+          onSelectRole={(r) => {
+            if (r === 'siswa') {
+              handleTeacherSimulateStudent();
+            }
+          }}
           onClose={() => setShowShareLinksModal(false)}
         />
       )}

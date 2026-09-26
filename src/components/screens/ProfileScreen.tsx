@@ -27,8 +27,12 @@ import { PROJECT_METADATA } from '../../data/curriculumData';
 interface ProfileScreenProps {
   userRole: UserRole;
   accessibility: AccessibilitySettings;
+  activeUserName?: string;
+  activeNisn?: string;
+  activeClassroom?: string;
+  onLogout?: () => void;
   onUpdateAccessibility: (settings: AccessibilitySettings) => void;
-  onToggleRole: () => void;
+  onToggleRole?: () => void;
   onOpenTeacherUpload: () => void;
   onOpenOfflineDownload: () => void;
   onOpenStudentManagement?: () => void;
@@ -42,6 +46,10 @@ interface ProfileScreenProps {
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   userRole,
   accessibility,
+  activeUserName,
+  activeNisn,
+  activeClassroom,
+  onLogout,
   onUpdateAccessibility,
   onToggleRole,
   onOpenTeacherUpload,
@@ -61,21 +69,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm space-y-4">
         <div className="flex items-center gap-3.5">
           <div className="w-14 h-14 rounded-2xl bg-emerald-100 border-2 border-emerald-300 flex items-center justify-center text-3xl shadow-xs">
-            {userRole === 'guru' ? '👩‍🏫' : '👩‍🎓'}
+            {userRole === 'guru' ? '👩‍🏫' : '👨‍🎓'}
           </div>
           <div className="space-y-0.5 flex-1">
             <div className="flex items-center justify-between">
               <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                {userRole === 'guru' ? PROJECT_METADATA.guruPengampu : 'Halo, Dita!'}
+                {userRole === 'guru' ? PROJECT_METADATA.guruPengampu : (activeUserName || 'Dita Anggraini')}
               </h2>
               <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
-                {userRole === 'guru' ? 'Guru Pengampu' : 'Siswa Aktif'}
+                {userRole === 'guru' ? 'Guru Pengampu' : (activeClassroom || 'Siswa XI-IPS 1')}
               </span>
             </div>
             <p className="text-xs text-slate-500 leading-snug">
               {userRole === 'guru'
                 ? 'Pengampu Sosiologi SMA Inklusif · Pendamping Pembelajaran Ramah UDL'
-                : 'Terus semangat belajar karena setiap langkahmu berarti!'}
+                : `NISN: ${activeNisn || '0081234561'} · Jalur Belajar Inklusif Mandiri`}
             </p>
           </div>
         </div>
@@ -84,8 +92,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         {userRole === 'siswa' ? (
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-800">Progres Unit Ini</span>
-              <span className="font-bold text-emerald-700">70% Selesai</span>
+              <span className="font-semibold text-slate-800">Progres Pembelajaran Saya</span>
+              <span className="font-bold text-emerald-700">Aktif & Siap Dikoreksi</span>
             </div>
             <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
               <div
@@ -94,8 +102,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               ></div>
             </div>
             <div className="flex items-center justify-between text-[10px] text-slate-400">
-              <span>2 dari 3 aktivitas tuntas</span>
-              <span>Tugas utama terkirim</span>
+              <span>Aktivitas LKPD terhubung ke LMS Guru</span>
+              <span>Tugas terkirim langsung ke Bu Siti</span>
             </div>
           </div>
         ) : (
@@ -125,17 +133,26 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </div>
         )}
 
-        {/* Role Quick Switch Button */}
-        <div className="pt-1">
-          <button
-            onClick={onToggleRole}
-            className="w-full py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors border border-slate-200"
-          >
-            <UserCheck className="w-4 h-4 text-emerald-700" />
-            <span>
-              Ganti Peran: Saat ini sebagai {userRole === 'guru' ? 'Guru' : 'Siswa'} (Klik untuk ke {userRole === 'guru' ? 'Siswa' : 'Guru'})
-            </span>
-          </button>
+        {/* Action Buttons: Logout & Teacher Simulation */}
+        <div className="pt-1 flex flex-col gap-2">
+          {userRole === 'guru' && onToggleRole && (
+            <button
+              onClick={onToggleRole}
+              className="w-full py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors border border-emerald-200"
+            >
+              <UserCheck className="w-4 h-4 text-emerald-700" />
+              <span>Simulasi: Lihat Tampilan Sudut Pandang Siswa</span>
+            </button>
+          )}
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="w-full py-2.5 px-3 bg-slate-100 hover:bg-red-50 hover:text-red-700 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors border border-slate-200 hover:border-red-200"
+            >
+              <span>Keluar dari Akun ({userRole === 'guru' ? 'Guru' : 'Siswa'})</span>
+            </button>
+          )}
         </div>
       </div>
 

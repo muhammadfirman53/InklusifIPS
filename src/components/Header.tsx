@@ -29,7 +29,9 @@ interface HeaderProps {
   isMockupView: boolean;
   unreadNotificationsCount: number;
   isSpeaking: boolean;
-  onToggleRole: () => void;
+  activeUserName?: string;
+  onLogout: () => void;
+  onToggleRole?: () => void;
   onToggleOfflineSim: () => void;
   onToggleMockupView: () => void;
   onOpenPathwayModal: () => void;
@@ -50,6 +52,8 @@ export const Header: React.FC<HeaderProps> = ({
   isMockupView,
   unreadNotificationsCount,
   isSpeaking,
+  activeUserName,
+  onLogout,
   onToggleRole,
   onToggleOfflineSim,
   onToggleMockupView,
@@ -70,26 +74,45 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span className="hidden sm:inline">LMS Inklusif IPS SMA Kelompok 4 — Rural UDL</span>
           <span className="text-[11px] px-2 py-0.5 rounded-full font-bold bg-emerald-800/80 text-emerald-200 border border-emerald-700">
-            {userRole === 'guru' ? '👩‍🏫 Mode: Guru Sosiologi' : '👨‍🎓 Mode: Siswa SMA'}
+            {userRole === 'guru' ? '👩‍🏫 Mode: Guru Sosiologi' : `👨‍🎓 Siswa: ${activeUserName || 'Siswa SMA'}`}
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {userRole === 'guru' ? (
+            <>
+              <button
+                onClick={onOpenShareLinks}
+                className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-800 text-emerald-100 hover:bg-emerald-700 transition-colors border border-emerald-600 flex items-center gap-1"
+                title="Buka dan salin tautan terpisah untuk Siswa dan Guru"
+              >
+                <Share2 className="w-3 h-3 text-emerald-300" />
+                <span className="hidden sm:inline">Tautan Siswa & Guru</span>
+                <span className="sm:hidden">Link</span>
+              </button>
+              {onToggleRole && (
+                <button
+                  onClick={onToggleRole}
+                  className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-900 text-emerald-200 hover:bg-emerald-800 transition-colors border border-emerald-700 flex items-center gap-1"
+                  title="Simulasi melihat tampilan siswa"
+                >
+                  <UserCheck className="w-3 h-3 text-emerald-300" />
+                  <span>Simulasi Siswa</span>
+                </button>
+              )}
+            </>
+          ) : (
+            <span className="text-[10px] text-emerald-300 font-mono px-2 py-0.5 bg-emerald-900/80 rounded-full border border-emerald-700">
+              Akses Khusus Siswa
+            </span>
+          )}
+
+          {/* Logout button */}
           <button
-            onClick={onOpenShareLinks}
-            className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-800 text-emerald-100 hover:bg-emerald-700 transition-colors border border-emerald-600 flex items-center gap-1"
-            title="Buka dan salin tautan terpisah untuk Siswa dan Guru"
-          >
-            <Share2 className="w-3 h-3 text-emerald-300" />
-            <span className="hidden sm:inline">Tautan Portal Terpisah</span>
-            <span className="sm:hidden">Link</span>
-          </button>
-          <button
-            onClick={onToggleRole}
+            onClick={onLogout}
             className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white text-emerald-950 hover:bg-emerald-100 transition-colors shadow-xs flex items-center gap-1"
-            title="Klik untuk berpindah peran antara Guru dan Siswa"
+            title="Keluar dari akun dan kembali ke halaman login"
           >
-            <UserCheck className="w-3 h-3 text-emerald-700" />
-            <span>Ganti ke {userRole === 'guru' ? 'Siswa' : 'Guru'}</span>
+            <span>Keluar</span>
           </button>
         </div>
       </div>

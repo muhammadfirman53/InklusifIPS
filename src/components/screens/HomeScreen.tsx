@@ -25,6 +25,7 @@ import { speakText } from '../../utils/speech';
 interface HomeScreenProps {
   pathway: LearningPathway;
   userRole: UserRole;
+  currentStudentName?: string;
   isOfflineSimulated: boolean;
   onNavigate: (tab: any) => void;
   onOpenPathwayModal: () => void;
@@ -41,6 +42,7 @@ interface HomeScreenProps {
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   pathway,
   userRole,
+  currentStudentName,
   isOfflineSimulated,
   onNavigate,
   onOpenPathwayModal,
@@ -57,6 +59,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   return (
     <div className="space-y-4 pb-20 max-w-2xl mx-auto">
+      {/* Student Welcome Banner */}
+      {userRole === 'siswa' && (
+        <div className="p-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-emerald-950 rounded-2xl text-white shadow-sm flex items-center justify-between gap-3 border border-emerald-700/40 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center text-xl shrink-0 shadow-xs">
+              👨‍🎓
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] uppercase font-bold text-emerald-300 tracking-wider">
+                  Ruang Belajar Siswa Aktif
+                </span>
+                <span className="text-[9px] px-1.5 py-0.2 bg-emerald-800 rounded text-emerald-200">
+                  {pathway === 'online' ? 'Jalur Online' : 'Jalur Offline'}
+                </span>
+              </div>
+              <h3 className="text-xs sm:text-sm font-bold text-white">
+                Halo, {currentStudentName || 'Siswa XI-IPS 1'}!
+              </h3>
+              <p className="text-[11px] text-emerald-200/90">
+                Pilih caramu belajar: tonton video YouTube, baca dokumen PDF, atau dengar audio.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('materi')}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs shrink-0 transition-colors"
+          >
+            Mulai Belajar →
+          </button>
+        </div>
+      )}
       {/* Offline Alert if simulated */}
       {isOfflineSimulated && (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 shadow-sm animate-fadeIn">

@@ -26,6 +26,7 @@ import { TeacherGradingPanel } from '../teacher/TeacherGradingPanel';
 
 interface AssessmentScreenProps {
   userRole: UserRole;
+  currentStudentName?: string;
   isOfflineSimulated: boolean;
   onSpeak: (text: string) => void;
   submissions: SubmissionRecord[];
@@ -37,6 +38,7 @@ interface AssessmentScreenProps {
 
 export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   userRole,
+  currentStudentName = 'Dita Anggraini',
   isOfflineSimulated,
   onSpeak,
   submissions,
@@ -110,7 +112,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
     setTimeout(() => {
       const newSubmission: SubmissionRecord = {
         id: `sub-${Date.now()}`,
-        studentName: 'Dita Anggraini',
+        studentName: currentStudentName,
         productType: selectedProduct,
         title: submissionTitle.trim(),
         contentOrNote:
@@ -137,7 +139,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
       setSuccessToast(
         isOfflineSimulated
           ? 'Tugas disimpan di HP (Offline Queue). Akan otomatis sinkron saat ada internet!'
-          : 'Selamat! Tugasmu berhasil dikirim secara online ke Bu Guru Siti.'
+          : `Selamat ${currentStudentName}! Tugasmu berhasil dikirim langsung ke LMS Guru Bu Siti.`
       );
 
       setSubmissionTitle('');
@@ -424,48 +426,101 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
       </form>
 
           {/* Riwayat Tugas Dikumpulkan */}
-          {submissions.length > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-sm">
-              <h3 className="text-xs sm:text-sm font-bold text-slate-900">
-                Riwayat Tugas Terkumpul
-              </h3>
-              <div className="space-y-2">
-                {submissions.map((sub) => (
-                  <div
-                    key={sub.id}
-                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900">{sub.title}</span>
-                      <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          sub.status === 'tersimpan_offline'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-emerald-100 text-emerald-800'
-                        }`}
-                      >
-                        {sub.status === 'tersimpan_offline'
-                          ? 'Antrean Offline'
-                          : 'Terkirim Online'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 line-clamp-2">
-                      {sub.contentOrNote}
-                    </p>
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-200">
-                      <span className="capitalize">Format: {sub.productType}</span>
-                      <span>{sub.submittedAt}</span>
-                    </div>
-                    {sub.feedback && (
-                      <div className="mt-1.5 p-2 bg-emerald-50/70 border border-emerald-200 rounded-lg text-[11px] text-emerald-900">
-                        <span className="font-bold">Umpan Balik Guru ({sub.grade}/100):</span> {sub.feedback}
+          {(() => {
+            const displaySubmissions =
+              userRole === 'siswa'
+                ? submissions.filter((s) => s.studentName.toLowerCase() === currentStudentName.toLowerCase())
+                : submissions;
+
+            return displaySubmissions.length > 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                    {userRole === 'siswa' ? 'Riwayat Tugas Saya' : 'Riwayat Tugas Terkumpul'}
+                  </h3>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {displaySubmissions.length} Tugas Terdaftar
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {displaySubmissions.map((sub) => (
+                    <div
+                      key={sub.id}
+                      className={`p-3.5 rounded-2xl border space-y-2 text-xs transition-all ${
+                        sub.grade !== undefined
+                          ? 'bg-emerald-50/60 border-emerald-300 ring-1 ring-emerald-500/20'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-900">{sub.title}</span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full">
+                            {sub.studentName}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {sub.grade !== undefined ? (
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-700 text-white flex items-center gap-1 shadow-xs">
+                              <span>⭐ Nilai: {sub.grade}/100</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 flex items-center gap-1">
+                              <span>⏳ Menunggu Koreksi Guru</span>
+                            </span>
+                          )}
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              sub.status === 'tersimpan_offline'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            {sub.status === 'tersimpan_offline'
+                              ? 'Antrean Offline'
+                              : 'Terkirim Online'}
+                          </span>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      <p className="text-[11px] text-slate-600 line-clamp-3 leading-relaxed">
+                        {sub.contentOrNote}
+                      </p>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-200">
+                        <span className="capitalize font-semibold text-slate-500">
+                          Format: {sub.productType}
+                        </span>
+                        <span>{sub.submittedAt}</span>
+                      </div>
+
+                      {/* Display Teacher Correction & Feedback */}
+                      {sub.feedback && (
+                        <div className="mt-2 p-3 bg-emerald-100/70 border border-emerald-300 rounded-xl text-emerald-950 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs flex items-center gap-1 text-emerald-900">
+                              <span>👩‍🏫 Catatan Koreksi & Umpan Balik Guru:</span>
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full">
+                              Nilai Akhir: {sub.grade}/100
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-emerald-900 leading-relaxed font-sans">
+                            "{sub.feedback}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            ) : userRole === 'siswa' ? (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center text-xs text-slate-500 space-y-1">
+                <p className="font-semibold text-slate-700">Belum ada tugas yang kamu kumpulkan.</p>
+                <p className="text-[11px]">Pilih salah satu format produk asesmen di atas, lalu klik "Kirim Tugas Sekarang".</p>
+              </div>
+            ) : null;
+          })()}
         </>
       )}
     </div>

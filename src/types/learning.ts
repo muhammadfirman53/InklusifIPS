@@ -105,3 +105,13 @@ export interface AccessibilitySettings {
   simplifiedText: boolean;
   soundEffects: boolean;
 }
+
+export interface UserSession {
+  role: UserRole;
+  name: string;
+  nisn?: string;
+  nip?: string;
+  classroom?: string;
+  studentId?: string;
+  preferredPathway?: LearningPathway;
+}
